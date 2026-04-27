@@ -1,65 +1,254 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from 'react';
+import { KNOWN_CARDS } from '@/data/knownCards';
+import { optimizeSpending, suggestChoosableCategory } from '@/lib/cardEngine';
+import { CreditCard, Category, MonthlySpending, CATEGORIES, CATEGORY_LABELS } from '@/lib/types';
+
+const DEFAULT_SPENDING: MonthlySpending = {
+  dining: 400,
+  groceries: 600,
+  gas: 150,
+  travel: 200,
+  online_shopping: 300,
+  streaming: 50,
+  drugstore: 80,
+  other: 200,
+};
 
 export default function Home() {
+  const [myCards, setMyCards] = useState<CreditCard[]>([
+    KNOWN_CARDS[0],
+    KNOWN_CARDS[1],
+    KNOWN_CARDS[5],
+  ]);
+  const [spending, setSpending] = useState<MonthlySpending>(DEFAULT_SPENDING);
+  const [showCardPicker, setShowCardPicker] = useState(false);
+
+  const result = optimizeSpending(myCards, spending);
+  const choosableSuggestions = myCards
+    .filter(c => c.isChooosable)
+    .map(card => ({ card, ...suggestChoosableCategory(card, spending, myCards) }));
+
+  const toggleCard = (card: CreditCard) => {
+    setMyCards(prev =>
+      prev.find(c => c.id === card.id)
+        ? prev.filter(c => c.id !== card.id)
+        : [...prev, card]
+    );
+  };
+
+  const updateChoosableCategory = (cardId: string, category: Category) => {
+    setMyCards(prev =>
+      prev.map(c => c.id === cardId ? { ...c, choosableCategory: category } : c)
+    );
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-gray-950 text-white p-6 max-w-6xl mx-auto">
+      <h1 className="text-3xl font-bold mb-1">💳 Credit Card Optimizer</h1>
+      <p className="text-gray-400 mb-8">Find the best card for every purchase category</p>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+        {/* LEFT: Inputs */}
+        <div className="space-y-6">
+
+          {/* My Cards */}
+          <section className="bg-gray-900 rounded-2xl p-5">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">My Cards ({myCards.length})</h2>
+              <button
+                onClick={() => setShowCardPicker(!showCardPicker)}
+                className="text-sm bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg">
+                {showCardPicker ? 'Done' : '+ Add / Remove'}
+              </button>
+            </div>
+
+            {showCardPicker && (
+              <div className="mb-4 space-y-2">
+                {KNOWN_CARDS.map(card => (
+                  <label key={card.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!myCards.find(c => c.id === card.id)}
+                      onChange={() => toggleCard(card)}
+                      className="w-4 h-4" />
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: card.color }} />
+                    <span className="text-sm">{card.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {myCards.map(card => (
+                <div key={card.id} className="flex items-center gap-3 p-3 bg-gray-800 rounded-xl">
+                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: card.color }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{card.name}</p>
+                    {card.isChooosable && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-yellow-400">3% category:</span>
+                        <select
+                          value={card.choosableCategory}
+                          onChange={e => updateChoosableCategory(card.id, e.target.value as Category)}
+                          className="text-xs bg-gray-700 rounded px-2 py-0.5 text-white">
+                          {CATEGORIES.filter(c => c !== 'other' && c !== 'streaming').map(cat => (
+                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Spending Sliders */}
+          <section className="bg-gray-900 rounded-2xl p-5">
+            <h2 className="text-lg font-semibold mb-4">Monthly Spending</h2>
+            <div className="space-y-4">
+              {CATEGORIES.map(cat => (
+                <div key={cat}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>{CATEGORY_LABELS[cat]}</span>
+                    <span className="font-mono text-green-400">${spending[cat] ?? 0}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={2000}
+                    step={25}
+                    value={spending[cat] ?? 0}
+                    onChange={e => setSpending(prev => ({ ...prev, [cat]: Number(e.target.value) }))}
+                    className="w-full accent-blue-500" />
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* RIGHT: Results */}
+        <div className="space-y-6">
+
+          {/* Summary */}
+          <section className="bg-gradient-to-br from-blue-900 to-blue-800 rounded-2xl p-5">
+            <h2 className="text-lg font-semibold mb-3">Projected Earnings</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-blue-300 text-sm">Monthly</p>
+                <p className="text-3xl font-bold">${result.totalMonthlyEarned.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-blue-300 text-sm">Annual</p>
+                <p className="text-3xl font-bold">${result.totalAnnualEarned.toFixed(0)}</p>
+              </div>
+            </div>
+            <p className="text-blue-300 text-xs mt-3">
+              * Point-based cards (e.g. Hilton Aspire) are converted to estimated cash value
+              at 0.5 cents per point. Actual value may vary based on how you redeem.
+            </p>
+          </section>
+
+          {/* Choosable Category Suggestions */}
+          {choosableSuggestions.length > 0 && (
+            <section className="bg-yellow-900/30 border border-yellow-700 rounded-2xl p-5">
+              <h2 className="text-lg font-semibold mb-3">🎯 Category Suggestions</h2>
+              {choosableSuggestions.map(({ card, suggestedCategory, gainVsCurrent }) => (
+                <div key={card.id} className="text-sm">
+                  <p className="text-yellow-300 font-medium">{card.name}</p>
+                  {card.choosableCategory === suggestedCategory ? (
+                    <p className="text-green-400">
+                      Your chosen category ({CATEGORY_LABELS[suggestedCategory]}) is optimal!
+                    </p>
+                  ) : (
+                    <div>
+                      <p className="text-gray-300">
+                        Switch to{' '}
+                        <span className="text-yellow-300 font-bold">
+                          {CATEGORY_LABELS[suggestedCategory]}
+                        </span>{' '}
+                        to earn +${gainVsCurrent.toFixed(2)}/mo more
+                      </p>
+                      <button
+                        onClick={() => updateChoosableCategory(card.id, suggestedCategory)}
+                        className="mt-2 text-xs bg-yellow-600 hover:bg-yellow-500 px-3 py-1 rounded-lg">
+                        Apply Suggestion
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* Per-Category Recommendations */}
+          <section className="bg-gray-900 rounded-2xl p-5">
+            <h2 className="text-lg font-semibold mb-4">Best Card Per Category</h2>
+            {result.recommendations.length === 0 ? (
+              <p className="text-gray-500">Add spending amounts to see recommendations</p>
+            ) : (
+              <div className="space-y-3">
+                {result.recommendations
+                  .sort((a, b) => b.monthlyEarned - a.monthlyEarned)
+                  .map(rec => (
+                    <div key={rec.category} className="flex flex-col gap-1 p-3 bg-gray-800 rounded-xl">
+
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: rec.bestCard.color }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between">
+                            <span className="text-sm font-medium">
+                              {CATEGORY_LABELS[rec.category]}
+                            </span>
+                            <span className="text-green-400 font-mono text-sm">
+                              +${rec.monthlyEarned.toFixed(2)}/mo
+                            </span>
+                          </div>
+                          <div className="flex justify-between mt-0.5">
+                            <span className="text-xs text-gray-400 truncate">
+                              {rec.bestCard.name}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {(rec.cashbackRate * 100).toFixed(1)}% back
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {rec.bestCard.id === 'chase-freedom-flex' &&
+                        (rec.category === 'online_shopping' || rec.category === 'groceries') && (
+                        <div className="ml-6 mt-1 text-xs text-yellow-400 bg-yellow-900/30 rounded-lg px-2 py-1">
+                          Rotating category - expires June 30, 2026.{' '}
+                          <a
+                            href="https://www.chase.com/personal/credit-cards/freedom/flex"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline hover:text-yellow-300">
+                            Check current categories
+                          </a>
+                        </div>
+                      )}
+
+                      {rec.bestCard.id === 'amex-hilton-aspire' && (
+                        <div className="ml-6 mt-1 text-xs text-amber-400 bg-amber-900/30 rounded-lg px-2 py-1">
+                          Estimated cash value of Hilton points at 0.5 cents each. Actual value varies by redemption.
+                        </div>
+                      )}
+
+                    </div>
+                  ))}
+              </div>
+            )}
+          </section>
+
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
