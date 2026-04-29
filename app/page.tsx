@@ -24,6 +24,8 @@ export default function Home() {
   ]);
   const [spending, setSpending] = useState<MonthlySpending>(DEFAULT_SPENDING);
   const [showCardPicker, setShowCardPicker] = useState(false);
+  const [explanation, setExplanation] = useState<string>('');
+  const [loadingExplanation, setLoadingExplanation] = useState(false);
 
   const result = optimizeSpending(myCards, spending);
   const choosableSuggestions = myCards
@@ -42,6 +44,29 @@ export default function Home() {
     setMyCards(prev =>
       prev.map(c => c.id === cardId ? { ...c, choosableCategory: category } : c)
     );
+  };
+
+  const handleExplain = async () => {
+    setLoadingExplanation(true);
+    setExplanation('');
+    try {
+      const response = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recommendations: result.recommendations,
+          spending,
+          cards: myCards,
+        }),
+      });
+      const data = await response.json();
+      setExplanation(data.explanation);
+    } catch (error) {
+      setExplanation('Sorry, something went wrong. Please try again.');
+      console.error(error);
+    } finally {
+      setLoadingExplanation(false);
+    }
   };
 
   return (
@@ -152,6 +177,26 @@ export default function Home() {
             </p>
           </section>
 
+          {/* AI Explanation */}
+          <section className="bg-gray-900 rounded-2xl p-5">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-semibold">🤖 AI Analysis</h2>
+              <button
+                onClick={handleExplain}
+                disabled={loadingExplanation || result.recommendations.length === 0}
+                className="text-sm bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-500 px-3 py-1 rounded-lg transition-colors">
+                {loadingExplanation ? 'Thinking...' : 'Explain my results'}
+              </button>
+            </div>
+            {explanation ? (
+              <p className="text-gray-300 text-sm leading-relaxed">{explanation}</p>
+            ) : (
+              <p className="text-gray-600 text-sm">
+                Click the button to get a plain English explanation of your results and personalized tips.
+              </p>
+            )}
+          </section>
+
           {/* Choosable Category Suggestions */}
           {choosableSuggestions.length > 0 && (
             <section className="bg-yellow-900/30 border border-yellow-700 rounded-2xl p-5">
@@ -195,7 +240,6 @@ export default function Home() {
                   .sort((a, b) => b.monthlyEarned - a.monthlyEarned)
                   .map(rec => (
                     <div key={rec.category} className="flex flex-col gap-1 p-3 bg-gray-800 rounded-xl">
-
                       <div className="flex items-center gap-3">
                         <span
                           className="w-3 h-3 rounded-full flex-shrink-0"
